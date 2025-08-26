@@ -1,0 +1,6 @@
+@Lufthansa.Api_HostAddress = http://localhost:5043
+
+GET {{Lufthansa.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

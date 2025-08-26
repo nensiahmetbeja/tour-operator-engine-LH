@@ -1,0 +1,15 @@
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/bin/Debug/net9.0/Lufthansa.Application.deps.json
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/bin/Debug/net9.0/Lufthansa.Application.dll
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/bin/Debug/net9.0/Lufthansa.Application.pdb
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/bin/Debug/net9.0/Lufthansa.Domain.dll
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/bin/Debug/net9.0/Lufthansa.Domain.pdb
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/obj/Debug/net9.0/Lufthansa.Application.csproj.AssemblyReference.cache
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/obj/Debug/net9.0/Lufthansa.Application.GeneratedMSBuildEditorConfig.editorconfig
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/obj/Debug/net9.0/Lufthansa.Application.AssemblyInfoInputs.cache
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/obj/Debug/net9.0/Lufthansa.Application.AssemblyInfo.cs
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/obj/Debug/net9.0/Lufthansa.Application.csproj.CoreCompileInputs.cache
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/obj/Debug/net9.0/Lufthans.F2C45D57.Up2Date
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/obj/Debug/net9.0/Lufthansa.Application.dll
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/obj/Debug/net9.0/refint/Lufthansa.Application.dll
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/obj/Debug/net9.0/Lufthansa.Application.pdb
+/Users/nensiahmetbeja/projects/LH/tour-operator-engine-LH/Lufthansa.Api/Lufthansa.Application/obj/Debug/net9.0/ref/Lufthansa.Application.dll

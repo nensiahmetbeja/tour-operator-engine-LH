@@ -1,0 +1,93 @@
+## Build outputs
+bin/
+obj/
+[Bb]uild/
+[Ll]og/
+artifacts/
+
+## JetBrains Rider / IntelliJ
+.idea/
+*.sln.iml
+*.sln.DotSettings*
+*.Rider/
+
+## Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## VS Code
+.vscode/
+
+## NuGet
+*.nupkg
+*.snupkg
+*.nuspec
+packages/
+project.lock.json
+project.fragment.lock.json
+
+## Config and secrets
+*.Secrets.json
+*.secret
+secrets.json
+*.env
+.env.*
+
+## Logs / Dumps
+*.log
+*.svclog
+*.tmp
+*.bak
+*.old
+*.orig
+
+## OS-specific
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+Icon?
+
+## Test results
+TestResult.xml
+*.coverage
+*.coveragexml
+*.testsettings
+*.trx
+*.pidb
+*.tlog
+
+## Docker
+docker-compose.override.yml
+**/Dockerfile.*.backup
+**/Dockerfile.*.temp
+**/docker-compose.override.*.yml
+**/docker-compose.override.*.yaml
+**/docker-compose.override.yaml
+**/docker-compose.override.yml
+
+## Node/npm
+node_modules/
+npm-debug.log
+yarn-error.log
+*.tgz
+
+## Rider & scratch stuff
+*.userprefs
+*.idea/**/workspace.xml
+*.idea/**/tasks.xml
+*.idea/**/usage.statistics.xml
+*.idea/**/dictionaries
+*.idea/**/shelf
+
+## Other generated
+*.tgz
+*.zip
+*.tar
+*.gz
+*.swp
+*.scc
