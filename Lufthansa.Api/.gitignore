@@ -67,27 +67,9 @@ docker-compose.override.yml
 **/Dockerfile.*.temp
 **/docker-compose.override.*.yml
 **/docker-compose.override.*.yaml
-**/docker-compose.override.yaml
-**/docker-compose.override.yml
 
 ## Node/npm
 node_modules/
 npm-debug.log
 yarn-error.log
 *.tgz
-
-## Rider & scratch stuff
-*.userprefs
-*.idea/**/workspace.xml
-*.idea/**/tasks.xml
-*.idea/**/usage.statistics.xml
-*.idea/**/dictionaries
-*.idea/**/shelf
-
-## Other generated
-*.tgz
-*.zip
-*.tar
-*.gz
-*.swp
-*.scc
