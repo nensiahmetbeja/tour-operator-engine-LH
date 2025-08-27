@@ -28,7 +28,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Auth\" />
       <Folder Include="Configuration\" />
       <Folder Include="DTOs\" />
     </ItemGroup>
