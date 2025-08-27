@@ -4,14 +4,45 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Lufthansa.Api.Auth;
 using Lufthansa.Api.Auth.Blacklist;
-using Lufthansa.Infrastructure.Persistence; 
+using Lufthansa.Application.Services;
+using Lufthansa.Infrastructure.Persistence;
+using Lufthansa.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    // Basic doc info (optional)
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Lufthansa API", Version = "v1" });
+
+    // JWT Bearer scheme
+    var jwtScheme = new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Description = "Enter **ONLY** your JWT. No 'Bearer ' prefix needed.",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Reference = new OpenApiReference
+        {
+            Type = ReferenceType.SecurityScheme,
+            Id = "Bearer"
+        }
+    };
+
+    c.AddSecurityDefinition("Bearer", jwtScheme);
+
+    // Require token by default (so lock icon shows on [Authorize] endpoints)
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        { jwtScheme, Array.Empty<string>() }
+    });
+});
 
 // Db
 builder.Services.AddDbContext<ApplicationDbContext>(opt =>
@@ -63,6 +94,8 @@ builder.Services.AddSingleton<IUserService, InMemoryUserService>();
 // Token blacklist (memory now; swap to Redis later)
 builder.Services.AddSingleton<ITokenBlacklist, InMemoryTokenBlacklist>();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ITourOperatorService, TourOperatorService>();
+
 
 var app = builder.Build();
 
