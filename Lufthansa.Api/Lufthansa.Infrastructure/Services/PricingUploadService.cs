@@ -93,8 +93,34 @@ public class PricingUploadService(ApplicationDbContext db) : IPricingUploadServi
         var inserted = 0;
         if (toInsert.Count > 0)
         {
-            db.DailyPricings.AddRange(toInsert);
-            inserted = await db.SaveChangesAsync(ct);
+            try
+            {
+                db.DailyPricings.AddRange(toInsert);
+                inserted = await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("23505") == true)
+            {
+                // uniqueness violation: do per-row upsert
+                foreach (var e in toInsert)
+                {
+                    var existing = await db.DailyPricings.FirstOrDefaultAsync(x =>
+                        x.TourOperatorId == e.TourOperatorId &&
+                        x.RouteId == e.RouteId &&
+                        x.SeasonId == e.SeasonId &&
+                        x.Date == e.Date, ct);
+
+                    if (existing is null) { db.DailyPricings.Add(e); }
+                    else
+                    {
+                        existing.EconomyPrice  = e.EconomyPrice;
+                        existing.BusinessPrice = e.BusinessPrice;
+                        existing.EconomySeats  = e.EconomySeats;
+                        existing.BusinessSeats = e.BusinessSeats;
+                    }
+                }
+                inserted = await db.SaveChangesAsync(ct);
+            }
+
         }
 
         return new UploadSummaryDto(inserted, skipped, errors);
