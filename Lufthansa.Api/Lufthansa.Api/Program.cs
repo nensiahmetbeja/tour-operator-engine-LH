@@ -96,7 +96,14 @@ builder.Services.AddSingleton<ITokenBlacklist, InMemoryTokenBlacklist>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITourOperatorService, TourOperatorService>();
 builder.Services.AddScoped<IPricingUploadService, PricingUploadService>();
+builder.Services.AddScoped<IPricingQueryService, PricingQueryService>();
 
+// Redis cache
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration["Redis:Connection"];
+    options.InstanceName = "lh:";
+});
 
 
 var app = builder.Build();

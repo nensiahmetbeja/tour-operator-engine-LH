@@ -6,16 +6,25 @@ using Lufthansa.Domain.Entities;
 using Lufthansa.Infrastructure.Persistence;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;   
 using Npgsql;
 
-public class PricingUploadService(ApplicationDbContext db) : IPricingUploadService
+public class PricingUploadService : IPricingUploadService
 {
+    private readonly ApplicationDbContext db;
+    private readonly IDistributedCache cache;   
+
+    public PricingUploadService(ApplicationDbContext db, IDistributedCache cache)
+    {
+        this.db = db;
+        this.cache = cache;
+    }
+
     private static readonly string DateFormat = "yyyy-MM-dd";
 
     private static bool IsUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg && pg.SqlState == "23505";
 
-    // mode parameter ("skip" | "overwrite" | "error")
     public async Task<UploadSummaryDto> UploadPricingAsync(
         Guid tourOperatorId,
         Stream csvStream,
@@ -108,6 +117,10 @@ public class PricingUploadService(ApplicationDbContext db) : IPricingUploadServi
             try
             {
                 inserted = await db.SaveChangesAsync(ct);
+
+                // bump version for this operator so admin cache misses next time
+                await InvalidateOperatorCache(tourOperatorId, ct);
+
                 return new UploadSummaryDto(inserted, skipped, errors);
             }
             catch (DbUpdateException ex) when (IsUniqueViolation(ex))
@@ -160,7 +173,6 @@ public class PricingUploadService(ApplicationDbContext db) : IPricingUploadServi
                                 "Duplicate day detected for this route/season/date. Re-upload with ?mode=skip or ?mode=overwrite.");
 
                         default:
-                            // safety: treat unknown as skip
                             db.DailyPricings.Add(e);
                             await db.SaveChangesAsync(ct);
                             inserted++;
@@ -171,10 +183,14 @@ public class PricingUploadService(ApplicationDbContext db) : IPricingUploadServi
                 {
                     // Duplicate → skip gracefully
                     skipped++;
-                    // Optional: add more detail if you want
-                    // errors.Add($"Duplicate skipped: {e.Date:yyyy-MM-dd}");
                     db.ChangeTracker.Clear();
                 }
+            }
+
+            // bump version after the per-row save path too
+            if (inserted > 0)
+            {
+                await InvalidateOperatorCache(tourOperatorId, ct);
             }
         }
 
@@ -195,14 +211,17 @@ public class PricingUploadService(ApplicationDbContext db) : IPricingUploadServi
 
     private async Task<Guid> GetOrCreateSeasonId(Guid opId, string code, CancellationToken ct)
     {
-        var s = await db.Seasons.AsNoTracking()
+        var se = await db.Seasons.AsNoTracking()
             .Where(x => x.TourOperatorId == opId && x.Code == code)
             .Select(x => new { x.Id }).FirstOrDefaultAsync(ct);
-        if (s is not null) return s.Id;
+        if (se is not null) return se.Id;
 
         var entity = new Season { TourOperatorId = opId, Code = code };
         db.Seasons.Add(entity);
         await db.SaveChangesAsync(ct);
         return entity.Id;
     }
+
+    private Task InvalidateOperatorCache(Guid opId, CancellationToken ct) =>
+        cache.SetStringAsync($"pricing:v:{opId}", DateTime.UtcNow.Ticks.ToString(), ct);
 }

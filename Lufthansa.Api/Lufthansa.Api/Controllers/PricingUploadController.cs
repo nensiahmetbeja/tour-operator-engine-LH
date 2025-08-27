@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Lufthansa.Api.Controllers.Requests;
 using Lufthansa.Application.Services;
 using Lufthansa.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -13,13 +14,14 @@ public class PricingUploadController(IPricingUploadService service) : Controller
     [Authorize(Policy = "TourOperatorOnly")]
     [HttpPost]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> Upload(Guid tourOperatorId, [FromForm] IFormFile file, [FromQuery] bool skipBadRows = true, 
+    public async Task<IActionResult> Upload(Guid tourOperatorId,  [FromForm] PricingUploadRequest request, [FromQuery] bool skipBadRows = true, 
         [FromQuery] string mode = "skip",  // "skip" | "overwrite" | "error"
         CancellationToken ct = default)
     {
         var claimId = User.FindFirst("tourOperatorId")?.Value;
         if (!Guid.TryParse(claimId, out var myId) || myId != tourOperatorId)
             return Forbid();
+        var file = request.File;
 
         if (file is null || file.Length == 0)
             return BadRequest(new { message = "CSV file is required" });
