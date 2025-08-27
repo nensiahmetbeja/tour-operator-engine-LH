@@ -24,7 +24,7 @@ This repository implements a tour operator pricing import and query engine for t
 ### Clone & Restore
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/nensiahmetbeja/tour-operator-engine-LH.git
 cd tour-operator-engine-LH
 dotnet restore
 ```
