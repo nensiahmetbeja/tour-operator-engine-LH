@@ -1,9 +1,10 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Lufthansa.Api.Auth;
 using Lufthansa.Api.Auth.Blacklist;
-using Lufthansa.Infrastructure.Persistence; // <-- your DbContext
+using Lufthansa.Infrastructure.Persistence; 
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -33,6 +34,20 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromSeconds(30)
+        };
+
+        opts.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async ctx =>
+            {
+                var blacklist = ctx.HttpContext.RequestServices.GetRequiredService<ITokenBlacklist>();
+                var jti = ctx.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+
+                if (!string.IsNullOrEmpty(jti) && await blacklist.IsBannedAsync(jti))
+                {
+                    ctx.Fail("Token is revoked");
+                }
+            }
         };
     });
 
