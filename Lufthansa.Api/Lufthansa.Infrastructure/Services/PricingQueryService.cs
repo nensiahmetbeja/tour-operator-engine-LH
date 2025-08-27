@@ -22,7 +22,7 @@ public sealed class PricingQueryService(
 
     public async Task<PagedResultDto<PricingRowDto>> GetAsync(PricingQueryDto q, CancellationToken ct = default)
     {
-        // 1) Build a versioned cache key
+        // 1) Build a versioned cache key (no date range in DTO anymore)
         var version = await cache.GetStringAsync(VersionKey(q.TourOperatorId), ct) ?? "0";
         var key = CacheKey(version, q);
 
@@ -34,22 +34,19 @@ public sealed class PricingQueryService(
         // 3) DB query (filters + pagination)
         var baseQ =
             from p in db.DailyPricings.AsNoTracking()
-            join r in db.Routes.AsNoTracking()  on p.RouteId  equals r.Id
-            join se in db.Seasons.AsNoTracking() on p.SeasonId equals se.Id
+            join r  in db.Routes.AsNoTracking()   on p.RouteId  equals r.Id
+            join se in db.Seasons.AsNoTracking()  on p.SeasonId equals se.Id
             where p.TourOperatorId == q.TourOperatorId
             select new
             {
                 p.Date,
-                RouteCode  = r.Code,
-                SeasonCode = se.Code,
+                RouteCode   = r.Code,
+                SeasonCode  = se.Code,
                 p.EconomyPrice,
                 p.BusinessPrice,
                 p.EconomySeats,
                 p.BusinessSeats
             };
-
-        if (q.From is not null) baseQ = baseQ.Where(x => x.Date >= q.From);
-        if (q.To   is not null) baseQ = baseQ.Where(x => x.Date <= q.To);
 
         var total = await baseQ.CountAsync(ct);
 
@@ -79,8 +76,10 @@ public sealed class PricingQueryService(
     }
 
     private static string VersionKey(Guid tourOperatorId) => $"pricing:v:{tourOperatorId}";
+
+    // Removed from/to from the cache key since they no longer exist on the DTO
     private static string CacheKey(string ver, PricingQueryDto q) =>
-        $"pricing:{ver}:{q.TourOperatorId}:{q.From?.ToString("yyyy-MM-dd") ?? "_"}:{q.To?.ToString("yyyy-MM-dd") ?? "_"}:{q.Page}:{q.PageSize}";
+        $"pricing:{ver}:{q.TourOperatorId}:{q.Page}:{q.PageSize}";
 
     // Minimal DateOnly converter for System.Text.Json
     private sealed class DateOnlyConverter : JsonConverter<DateOnly>
