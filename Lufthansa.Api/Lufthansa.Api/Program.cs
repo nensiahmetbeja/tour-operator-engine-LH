@@ -95,6 +95,8 @@ builder.Services.AddSingleton<IUserService, InMemoryUserService>();
 builder.Services.AddSingleton<ITokenBlacklist, InMemoryTokenBlacklist>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITourOperatorService, TourOperatorService>();
+builder.Services.AddScoped<IPricingUploadService, PricingUploadService>();
+
 
 
 var app = builder.Build();
