@@ -37,12 +37,19 @@ dotnet restore
    ```
    *(Ensure docker-compose.yml is present or use your own containers.)*
 
-2. **Apply EF Core migrations and seed data**:
+   **Default connections:**
+    - **PostgreSQL**: `Host=localhost;Port=5432;Database=lufthansa_pricing;Username=postgres;Password=secret`
+    - **Redis**: `localhost:6379`
+
+3. **Database setup:**
+(choose one): Quick start (auto-create on first run) 
+OR Migrations (recommended)
+
    ```bash
    dotnet ef database update -p Lufthansa.Infrastructure -s Lufthansa.Api
    ```
 
-3. **Run the API**:
+4. **Run the API**:
    ```bash
    cd Lufthansa.Api
    dotnet run
@@ -61,7 +68,10 @@ Pre-seeded demo users:
 - Username: `admin`
 - Password: `admin123`
 
-Tokens are generated via a mock login endpoint or seeded token values; see `/test-upload.html` for usage.
+Tokens are generated via a mock login endpoint:
+`POST /api/auth/login`
+
+for example: JSON body { "username": "op1", "password": "op123" } returns access_token used as Bearer in Authorization.
 
 ## UI for Testing
 
@@ -76,14 +86,15 @@ Features:
 ## API Endpoints
 
 - **Swagger UI**: http://localhost:5043/swagger
-- **Pricing Upload**: `POST /api/touroperators/{tourOperatorId}/pricing-upload`
-- **Admin Query**: `GET /api/admin/pricing?page=1&pageSize=50`
+- **Pricing Upload**: `POST /api/touroperators/{tourOperatorId}/pricing-upload` (requires TourOperatorRole)
+- **Admin Query**: `GET /api/data/{tourOperatorId}?page=1&pageSize=50` (requires AdminRole)
+    - the tourOperatorId in the URL must match the tourOperatorId claim in the token (otherwise Forbid)
 
-For details, copy the OpenAPI JSON URL from Swagger UI and import into Postman.
 
-## Documentation
+## Documentation 
+https://github.com/nensiahmetbeja/tour-operator-engine-LH/tree/main/docs
 
-- **Postman Collection**: see `docs/postman`
+- **Postman Collection**: see `docs/Lufthansa API.postman_collection.json`
 - **Architecture Diagram**: see `docs/architecture`
 
 ## Design Decisions and Trade-offs
@@ -92,7 +103,6 @@ For details, copy the OpenAPI JSON URL from Swagger UI and import into Postman.
 
 - **.NET 9.0**, EF Core, PostgreSQL, Redis, SignalR, CsvHelper
 - Swagger/OpenAPI for testing
-- **Trade-off**: Used .NET 9.0 preview packages; more modern but watch compatibility.
 
 ### Architecture
 
@@ -106,8 +116,12 @@ For details, copy the OpenAPI JSON URL from Swagger UI and import into Postman.
 
 **Trade-off**: Clean layering adds complexity but helps maintainability.
 
-### Authentication
+### Containerized dependencies (Docker): run Postgres and Redis via docker compose.
+- **Why**: one-command reproducible setup across machines; eliminates “works on my machine” issues; clean reset and consistent versions for local dev and CI.
+-**Trade-off:** adds Docker Desktop as a dependency and consumes more resources than local installs; startup and image pulls can be slower.
+-**Note:** API can be run locally or containerized later; DB/cache isolation is the key win here
 
+### Authentication
 **Chosen approach**: JWT Bearer with role-based authorization (e.g., TourOperator, Admin).
 - **Why**: stateless, easy to scale and cache, works for both HTTP APIs and SignalR.
 - **Trade-off**: managing token issuance/rotation and revocation becomes your responsibility.
@@ -127,12 +141,7 @@ For details, copy the OpenAPI JSON URL from Swagger UI and import into Postman.
 **SignalR considerations**: use Bearer tokens for the hub connection; the client also passes a connectionId to correlate upload progress.
 - **Why**: simplest way to route progress to the correct client.
 - **Trade-off**: must validate that the provided connectionId belongs to the authenticated user/session to prevent spoofing; server-side mapping is recommended.
-
-**Browser vs API**: prefer Bearer tokens over cookies for a pure-API model and to simplify SPA/testing.
-- **Trade-off**: must store tokens safely in the browser (ideally in memory, use refresh-token rotation if needed); cookies would require CSRF defenses.
-
-**CORS and transport security**: restrict allowed origins in development and use HTTPS.
-- **Why**: reduces attack surface and protects tokens in transit.
+- **Note**: The test page passes connectionId via query string for demo purposes; production should bind connectionId to the authenticated user server-side to prevent spoofing.
 
 **Production hardening** (future work):
 - OIDC with an external IdP, PKCE for SPA flows
@@ -157,7 +166,7 @@ For details, copy the OpenAPI JSON URL from Swagger UI and import into Postman.
 
 ### Caching
 
-- Redis with version keys
+- Redis with version keys and TTL-based expiration (default 60 seconds)
 - Invalidates on upload
 - Pagination for queries
 - **Trade-off**: Simple TTL-free cache; enough for assessment.
