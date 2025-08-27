@@ -5,6 +5,7 @@ using Lufthansa.Application.Services;
 using Lufthansa.Domain.Entities;
 using Lufthansa.Infrastructure.Persistence;
 using System.Globalization;
+using Microsoft.EntityFrameworkCore;
 
 public class PricingUploadService(ApplicationDbContext db) : IPricingUploadService
 {
@@ -65,12 +66,14 @@ public class PricingUploadService(ApplicationDbContext db) : IPricingUploadServi
                 if (econPrice < 0 || bizPrice < 0) throw new Exception("Prices must be >= 0.");
                 if (econSeats < 0 || bizSeats < 0) throw new Exception("Seats must be >= 0.");
 
-                // TODO: map RouteCode/SeasonCode to IDs once you add reference tables
+                var routeId  = await GetOrCreateRouteId(tourOperatorId, routeCode!, ct);
+                var seasonId = await GetOrCreateSeasonId(tourOperatorId, seasonCode!, ct);
+
                 toInsert.Add(new DailyPricing
                 {
                     TourOperatorId = tourOperatorId,
-                    RouteId = Guid.NewGuid(),
-                    SeasonId = Guid.NewGuid(),
+                    RouteId = routeId,
+                    SeasonId = seasonId,
                     Date = date,
                     EconomyPrice = econPrice,
                     BusinessPrice = bizPrice,
@@ -96,4 +99,30 @@ public class PricingUploadService(ApplicationDbContext db) : IPricingUploadServi
 
         return new UploadSummaryDto(inserted, skipped, errors);
     }
+    private async Task<Guid> GetOrCreateRouteId(Guid opId, string code, CancellationToken ct)
+    {
+        var r = await db.Routes.AsNoTracking()
+            .Where(x => x.TourOperatorId == opId && x.Code == code)
+            .Select(x => new { x.Id }).FirstOrDefaultAsync(ct);
+        if (r is not null) return r.Id;
+
+        var entity = new Route { TourOperatorId = opId, Code = code };
+        db.Routes.Add(entity);
+        await db.SaveChangesAsync(ct);
+        return entity.Id;
+    }
+
+    private async Task<Guid> GetOrCreateSeasonId(Guid opId, string code, CancellationToken ct)
+    {
+        var s = await db.Seasons.AsNoTracking()
+            .Where(x => x.TourOperatorId == opId && x.Code == code)
+            .Select(x => new { x.Id }).FirstOrDefaultAsync(ct);
+        if (s is not null) return s.Id;
+
+        var entity = new Season { TourOperatorId = opId, Code = code };
+        db.Seasons.Add(entity);
+        await db.SaveChangesAsync(ct);
+        return entity.Id;
+    }
+
 }
