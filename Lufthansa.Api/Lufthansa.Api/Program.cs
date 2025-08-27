@@ -118,6 +118,10 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.InstanceName = "lh:";
 });
 
+builder.Services.AddHealthChecks()
+    .AddNpgSql(builder.Configuration.GetConnectionString("Default"))
+    .AddRedis(builder.Configuration["Redis:Connection"]);
+
 
 var app = builder.Build();
 app.UseCors("dev"); 

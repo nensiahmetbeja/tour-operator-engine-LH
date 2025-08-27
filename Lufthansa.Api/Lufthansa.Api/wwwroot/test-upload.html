@@ -10,7 +10,7 @@
         h1 { color: #333; text-align: center; margin-bottom: 30px; }
         .form-group { margin-bottom: 20px; }
         label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
-        input[type="file"] { width: 100%; padding: 10px; border: 2px dashed #ddd; border-radius: 4px; background: #fafafa; }
+        input[type="text"], input[type="file"] { width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; background: #fafafa; }
         button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; }
         button:hover { background: #0056b3; }
         button:disabled { background: #ccc; cursor: not-allowed; }
@@ -26,13 +26,31 @@
 <body>
 <div class="container">
     <h1>SignalR Pricing Upload Test</h1>
+
+    <div class="form-group">
+        <label>API Base URL:</label>
+        <input type="text" id="apiBase" value="http://localhost:5043">
+    </div>
+
+    <div class="form-group">
+        <label>Tour Operator ID:</label>
+        <input type="text" id="tourOpId" value="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa">
+    </div>
+
+    <div class="form-group">
+        <label>JWT Token:</label>
+        <input type="text" id="jwtToken" value="">
+    </div>
+
     <div class="form-group">
         <label for="fileInput">Select CSV File:</label>
         <input type="file" id="fileInput" accept=".csv" />
     </div>
+
     <div class="form-group">
         <button id="uploadBtn" disabled>Upload File</button>
     </div>
+
     <div id="status" class="status connecting">Connecting to SignalR...</div>
     <div class="progress-bar">
         <div class="progress-fill" id="progressFill"></div>
@@ -42,10 +60,6 @@
 
 <script>
     (async () => {
-        const API_BASE = "http://localhost:5043"; // match your API port
-        const TOUR_OPERATOR_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
-        const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJvcDEiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJUb3VyT3BlcmF0b3IiLCJqdGkiOiI3MzhkMDYxY2IyMjE0MzcwOWMzMDg0ZWI5YTA2ZWFjNSIsInRvdXJPcGVyYXRvcklkIjoiYWFhYWFhYWEtYWFhYS1hYWFhLWFhYWEtYWFhYWFhYWFhYWFhIiwiZXhwIjoxNzU2MzI2MTE5LCJpc3MiOiJMdWZ0aGFuc2EiLCJhdWQiOiJMdWZ0aGFuc2EuQXBpIn0.ggBPtatB_5_xr62Z_ZFaJLDMlYF0bJXNt_5q69dgauo";
-
         const statusEl = document.getElementById("status");
         const uploadBtn = document.getElementById("uploadBtn");
         const progressFill = document.getElementById("progressFill");
@@ -56,28 +70,35 @@
             logEl.textContent += m + "\n";
             logEl.scrollTop = logEl.scrollHeight;
         };
-
         const updateStatus = (text, css) => {
             statusEl.textContent = text;
             statusEl.className = "status " + css;
         };
-
         const updateProgress = (pct) => {
             progressFill.style.width = (pct || 0) + "%";
         };
+        function getConfig() {
+            return {
+                API_BASE: document.getElementById("apiBase").value.trim(),
+                TOUR_OPERATOR_ID: document.getElementById("tourOpId").value.trim(),
+                TOKEN: document.getElementById("jwtToken").value.trim()
+            };
+        }
 
-        // Build connection
+        const { API_BASE, TOKEN } = getConfig();
+
         const conn = new signalR.HubConnectionBuilder()
             .withUrl(`${API_BASE}/hubs/upload`, { accessTokenFactory: () => TOKEN })
             .withAutomaticReconnect()
             .build();
+        
 
         conn.on("progress", msg => {
             log(`[${msg.stage}] ${msg.pct ?? 0}% - ${msg.message}`);
             updateProgress(msg.pct ?? 0);
         });
 
-        conn.onreconnecting(err => {
+        conn.onreconnecting(() => {
             updateStatus("Reconnecting...", "connecting");
             uploadBtn.disabled = true;
         });
@@ -85,12 +106,11 @@
             updateStatus("Connected", "connected");
             uploadBtn.disabled = false;
         });
-        conn.onclose(err => {
+        conn.onclose(() => {
             updateStatus("Disconnected", "disconnected");
             uploadBtn.disabled = true;
         });
 
-        // Start connection
         try {
             await conn.start();
             log("Connected to hub. ConnectionId: " + conn.connectionId);
@@ -102,8 +122,8 @@
             return;
         }
 
-        // Upload click
         uploadBtn.onclick = async () => {
+            const { API_BASE, TOUR_OPERATOR_ID, TOKEN } = getConfig();
             const file = document.getElementById("fileInput").files[0];
             if (!file) return alert("Pick a CSV first");
 

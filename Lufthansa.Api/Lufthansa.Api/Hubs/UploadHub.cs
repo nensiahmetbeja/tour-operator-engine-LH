@@ -1,5 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Lufthansa.Api.Hubs;
 
-public class UploadHub : Hub { }
+[Authorize]
+public class UploadHub : Hub
+{
+}
