@@ -13,7 +13,9 @@ public class PricingUploadController(IPricingUploadService service) : Controller
     [Authorize(Policy = "TourOperatorOnly")]
     [HttpPost]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> Upload(Guid tourOperatorId, [FromForm] IFormFile file, [FromQuery] bool skipBadRows = true, CancellationToken ct = default)
+    public async Task<IActionResult> Upload(Guid tourOperatorId, [FromForm] IFormFile file, [FromQuery] bool skipBadRows = true, 
+        [FromQuery] string mode = "skip",  // "skip" | "overwrite" | "error"
+        CancellationToken ct = default)
     {
         var claimId = User.FindFirst("tourOperatorId")?.Value;
         if (!Guid.TryParse(claimId, out var myId) || myId != tourOperatorId)
@@ -22,8 +24,10 @@ public class PricingUploadController(IPricingUploadService service) : Controller
         if (file is null || file.Length == 0)
             return BadRequest(new { message = "CSV file is required" });
 
-        var summary = await service.UploadPricingAsync(tourOperatorId, file.OpenReadStream(), skipBadRows, ct);
-        // You could use 207 Multi-Status; 200 is fine for simplicity
+        var summary = await service.UploadPricingAsync(
+            tourOperatorId, file.OpenReadStream(),
+            skipBadRows: true, mode: mode, ct: ct);
+        
         return Ok(summary);
     }
 

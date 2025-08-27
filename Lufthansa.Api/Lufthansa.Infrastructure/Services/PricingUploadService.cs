@@ -6,12 +6,22 @@ using Lufthansa.Domain.Entities;
 using Lufthansa.Infrastructure.Persistence;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 public class PricingUploadService(ApplicationDbContext db) : IPricingUploadService
 {
     private static readonly string DateFormat = "yyyy-MM-dd";
 
-    public async Task<UploadSummaryDto> UploadPricingAsync(Guid tourOperatorId, Stream csvStream, bool skipBadRows = true, CancellationToken ct = default)
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException pg && pg.SqlState == "23505";
+
+    // mode parameter ("skip" | "overwrite" | "error")
+    public async Task<UploadSummaryDto> UploadPricingAsync(
+        Guid tourOperatorId,
+        Stream csvStream,
+        bool skipBadRows = true,
+        string mode = "error",
+        CancellationToken ct = default)
     {
         using var reader = new StreamReader(csvStream);
         var cfg = new CsvConfiguration(CultureInfo.InvariantCulture)
@@ -86,41 +96,86 @@ public class PricingUploadService(ApplicationDbContext db) : IPricingUploadServi
             {
                 skipped++;
                 errors.Add($"Row {row}: {ex.Message}");
-                if (!skipBadRows) break; // stop on first error (all-or-nothing mode)
+                if (!skipBadRows) break; // stop on first error (all-or-nothing)
             }
         }
 
         var inserted = 0;
         if (toInsert.Count > 0)
         {
+            // Fast path: try to insert everything in one batch
+            db.DailyPricings.AddRange(toInsert);
             try
             {
-                db.DailyPricings.AddRange(toInsert);
                 inserted = await db.SaveChangesAsync(ct);
+                return new UploadSummaryDto(inserted, skipped, errors);
             }
-            catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("23505") == true)
+            catch (DbUpdateException ex) when (IsUniqueViolation(ex))
             {
-                // uniqueness violation: do per-row upsert
-                foreach (var e in toInsert)
-                {
-                    var existing = await db.DailyPricings.FirstOrDefaultAsync(x =>
-                        x.TourOperatorId == e.TourOperatorId &&
-                        x.RouteId == e.RouteId &&
-                        x.SeasonId == e.SeasonId &&
-                        x.Date == e.Date, ct);
+                // fall back to per-row handling
+            }
 
-                    if (existing is null) { db.DailyPricings.Add(e); }
-                    else
+            // Clean tracker before per-row loop
+            db.ChangeTracker.Clear();
+
+            foreach (var e in toInsert)
+            {
+                try
+                {
+                    switch (mode)
                     {
-                        existing.EconomyPrice  = e.EconomyPrice;
-                        existing.BusinessPrice = e.BusinessPrice;
-                        existing.EconomySeats  = e.EconomySeats;
-                        existing.BusinessSeats = e.BusinessSeats;
+                        case "skip":
+                            db.DailyPricings.Add(e);
+                            await db.SaveChangesAsync(ct);
+                            inserted++;
+                            break;
+
+                        case "overwrite":
+                        {
+                            var existing = await db.DailyPricings.FirstOrDefaultAsync(x =>
+                                x.TourOperatorId == e.TourOperatorId &&
+                                x.RouteId        == e.RouteId &&
+                                x.SeasonId       == e.SeasonId &&
+                                x.Date           == e.Date, ct);
+
+                            if (existing is null)
+                            {
+                                db.DailyPricings.Add(e);
+                            }
+                            else
+                            {
+                                existing.EconomyPrice  = e.EconomyPrice;
+                                existing.BusinessPrice = e.BusinessPrice;
+                                existing.EconomySeats  = e.EconomySeats;
+                                existing.BusinessSeats = e.BusinessSeats;
+                            }
+
+                            await db.SaveChangesAsync(ct);
+                            inserted++;
+                            break;
+                        }
+
+                        case "error":
+                            throw new ArgumentException(
+                                "Duplicate day detected for this route/season/date. Re-upload with ?mode=skip or ?mode=overwrite.");
+
+                        default:
+                            // safety: treat unknown as skip
+                            db.DailyPricings.Add(e);
+                            await db.SaveChangesAsync(ct);
+                            inserted++;
+                            break;
                     }
                 }
-                inserted = await db.SaveChangesAsync(ct);
+                catch (DbUpdateException ex) when (IsUniqueViolation(ex) && mode == "skip")
+                {
+                    // Duplicate → skip gracefully
+                    skipped++;
+                    // Optional: add more detail if you want
+                    // errors.Add($"Duplicate skipped: {e.Date:yyyy-MM-dd}");
+                    db.ChangeTracker.Clear();
+                }
             }
-
         }
 
         return new UploadSummaryDto(inserted, skipped, errors);
@@ -150,5 +205,4 @@ public class PricingUploadService(ApplicationDbContext db) : IPricingUploadServi
         await db.SaveChangesAsync(ct);
         return entity.Id;
     }
-
 }
