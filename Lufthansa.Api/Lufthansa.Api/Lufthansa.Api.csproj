@@ -30,7 +30,7 @@
 
     <ItemGroup>
       <Folder Include="Configuration\" />
-      <Folder Include="DTOs\" />
+      <Folder Include="wwwroot\" />
     </ItemGroup>
 
 </Project>

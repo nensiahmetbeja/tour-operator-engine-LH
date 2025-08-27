@@ -6,21 +6,25 @@ using Lufthansa.Domain.Entities;
 using Lufthansa.Infrastructure.Persistence;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Distributed;   
+using Microsoft.Extensions.Caching.Distributed;
 using Npgsql;
 
 public class PricingUploadService : IPricingUploadService
 {
     private readonly ApplicationDbContext db;
-    private readonly IDistributedCache cache;   
+    private readonly IDistributedCache cache;
+    private readonly IProgressNotifier notifier;
 
-    public PricingUploadService(ApplicationDbContext db, IDistributedCache cache)
+    public PricingUploadService(ApplicationDbContext db, IDistributedCache cache, IProgressNotifier notifier)
     {
         this.db = db;
         this.cache = cache;
+        this.notifier = notifier;
     }
 
     private static readonly string DateFormat = "yyyy-MM-dd";
+    private Task Report(string? connId, string stage, int? pct, string message, CancellationToken ct = default) =>
+        notifier.ReportAsync(connId, stage, pct, message, ct);
 
     private static bool IsUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg && pg.SqlState == "23505";
@@ -28,10 +32,27 @@ public class PricingUploadService : IPricingUploadService
     public async Task<UploadSummaryDto> UploadPricingAsync(
         Guid tourOperatorId,
         Stream csvStream,
+        string? connectionId = null,
         bool skipBadRows = true,
         string mode = "error",
         CancellationToken ct = default)
     {
+        // --- 0) Optionally pre-count rows for % (only if the stream can seek) ---
+        int totalRows = 0;
+        if (csvStream.CanSeek)
+        {
+            var pos = csvStream.Position;
+            using (var counterReader = new StreamReader(csvStream, leaveOpen: true))
+            {
+                // Count lines; subtract 1 for header if present
+                while (await counterReader.ReadLineAsync() is { } _) totalRows++;
+                if (totalRows > 0) totalRows--; // header
+            }
+            csvStream.Position = pos; // rewind
+        }
+
+        await Report(connectionId, "validation_started", 0, "Validation started", ct);
+
         using var reader = new StreamReader(csvStream);
         var cfg = new CsvConfiguration(CultureInfo.InvariantCulture)
         {
@@ -52,7 +73,9 @@ public class PricingUploadService : IPricingUploadService
         csv.Read();
         csv.ReadHeader();
 
-        var row = 1; // header
+        var row = 1;          // header
+        var processed = 0;    // valid rows parsed
+
         while (await csv.ReadAsync())
         {
             row++;
@@ -100,6 +123,16 @@ public class PricingUploadService : IPricingUploadService
                     BusinessSeats = bizSeats,
                     CreatedAt = DateTime.UtcNow
                 });
+
+                processed++;
+
+                // Report every 500 rows
+                if (processed % 500 == 0)
+                {
+                    int? pct = null;
+                    if (totalRows > 0) pct = Math.Min(99, (int)Math.Round(processed * 100.0 / totalRows));
+                    await Report(connectionId, "processing", pct, $"Processed {processed} rows…", ct);
+                }
             }
             catch (Exception ex)
             {
@@ -109,28 +142,36 @@ public class PricingUploadService : IPricingUploadService
             }
         }
 
+        // Final validation update (if we didn’t hit the 500-row boundary)
+        {
+            int? pct = totalRows > 0 ? Math.Min(99, (int)Math.Round(processed * 100.0 / totalRows)) : null;
+            await Report(connectionId, "processing", pct, $"Processed {processed} rows (validation complete).", ct);
+        }
+
         var inserted = 0;
         if (toInsert.Count > 0)
         {
-            // Fast path: try to insert everything in one batch
+            await Report(connectionId, "bulk_insert_started", 99, "Bulk insert started…", ct);
+
             db.DailyPricings.AddRange(toInsert);
             try
             {
                 inserted = await db.SaveChangesAsync(ct);
 
-                // bump version for this operator so admin cache misses next time
                 await InvalidateOperatorCache(tourOperatorId, ct);
 
+                await Report(connectionId, "bulk_insert_completed", 100, $"Bulk insert completed. Inserted {inserted}, skipped {skipped}.", ct);
                 return new UploadSummaryDto(inserted, skipped, errors);
             }
             catch (DbUpdateException ex) when (IsUniqueViolation(ex))
             {
-                // fall back to per-row handling
+                // Fall back to per-row handling
             }
 
             // Clean tracker before per-row loop
             db.ChangeTracker.Clear();
 
+            var handled = 0;
             foreach (var e in toInsert)
             {
                 try
@@ -152,9 +193,7 @@ public class PricingUploadService : IPricingUploadService
                                 x.Date           == e.Date, ct);
 
                             if (existing is null)
-                            {
                                 db.DailyPricings.Add(e);
-                            }
                             else
                             {
                                 existing.EconomyPrice  = e.EconomyPrice;
@@ -169,8 +208,7 @@ public class PricingUploadService : IPricingUploadService
                         }
 
                         case "error":
-                            throw new ArgumentException(
-                                "Duplicate day detected for this route/season/date. Re-upload with ?mode=skip or ?mode=overwrite.");
+                            throw new ArgumentException("Duplicate day detected. Re-upload with ?mode=skip or ?mode=overwrite.");
 
                         default:
                             db.DailyPricings.Add(e);
@@ -178,24 +216,31 @@ public class PricingUploadService : IPricingUploadService
                             inserted++;
                             break;
                     }
+
+                    handled++;
+                    if (handled % 1000 == 0)
+                        await Report(connectionId, "bulk_insert_progress", null, $"Saved {handled}/{toInsert.Count}…", ct);
                 }
                 catch (DbUpdateException ex) when (IsUniqueViolation(ex) && mode == "skip")
                 {
-                    // Duplicate → skip gracefully
                     skipped++;
                     db.ChangeTracker.Clear();
                 }
             }
 
-            // bump version after the per-row save path too
             if (inserted > 0)
-            {
                 await InvalidateOperatorCache(tourOperatorId, ct);
-            }
+
+            await Report(connectionId, "bulk_insert_completed", 100, $"Bulk insert completed. Inserted {inserted}, skipped {skipped}.", ct);
+        }
+        else
+        {
+            await Report(connectionId, "done", 100, $"No valid rows. Skipped {skipped}.", ct);
         }
 
         return new UploadSummaryDto(inserted, skipped, errors);
     }
+
     private async Task<Guid> GetOrCreateRouteId(Guid opId, string code, CancellationToken ct)
     {
         var r = await db.Routes.AsNoTracking()

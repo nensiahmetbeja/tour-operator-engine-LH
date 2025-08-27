@@ -14,7 +14,9 @@ public class PricingUploadController(IPricingUploadService service) : Controller
     [Authorize(Policy = "TourOperatorOnly")]
     [HttpPost]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> Upload(Guid tourOperatorId,  [FromForm] PricingUploadRequest request, [FromQuery] bool skipBadRows = true, 
+    public async Task<IActionResult> Upload(Guid tourOperatorId,  [FromForm] PricingUploadRequest request, 
+        [FromQuery] string? connectionId,      //  supplied from client
+        [FromQuery] bool skipBadRows = true, 
         [FromQuery] string mode = "skip",  // "skip" | "overwrite" | "error"
         CancellationToken ct = default)
     {
@@ -27,8 +29,11 @@ public class PricingUploadController(IPricingUploadService service) : Controller
             return BadRequest(new { message = "CSV file is required" });
 
         var summary = await service.UploadPricingAsync(
-            tourOperatorId, file.OpenReadStream(),
-            skipBadRows: true, mode: mode, ct: ct);
+            tourOperatorId, 
+            file.OpenReadStream(),
+            connectionId,
+            skipBadRows: true, mode: mode, 
+            ct: ct);
         
         return Ok(summary);
     }

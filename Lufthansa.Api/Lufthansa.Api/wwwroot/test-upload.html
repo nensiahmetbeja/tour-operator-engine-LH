@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SignalR Pricing Upload Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; text-align: center; margin-bottom: 30px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
+        input[type="file"] { width: 100%; padding: 10px; border: 2px dashed #ddd; border-radius: 4px; background: #fafafa; }
+        button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .status { margin: 20px 0; padding: 15px; border-radius: 4px; font-weight: bold; }
+        .status.connected { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .status.disconnected { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .status.connecting { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        #log { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 14px; white-space: pre-wrap; }
+        .progress-bar { width: 100%; height: 20px; background-color: #e9ecef; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+        .progress-fill { height: 100%; background-color: #007bff; transition: width 0.3s ease; width: 0%; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>SignalR Pricing Upload Test</h1>
+    <div class="form-group">
+        <label for="fileInput">Select CSV File:</label>
+        <input type="file" id="fileInput" accept=".csv" />
+    </div>
+    <div class="form-group">
+        <button id="uploadBtn" disabled>Upload File</button>
+    </div>
+    <div id="status" class="status connecting">Connecting to SignalR...</div>
+    <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div id="log"></div>
+</div>
+
+<script>
+    (async () => {
+        const API_BASE = "http://localhost:5043"; // match your API port
+        const TOUR_OPERATOR_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+        const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJvcDEiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJUb3VyT3BlcmF0b3IiLCJqdGkiOiI3MzhkMDYxY2IyMjE0MzcwOWMzMDg0ZWI5YTA2ZWFjNSIsInRvdXJPcGVyYXRvcklkIjoiYWFhYWFhYWEtYWFhYS1hYWFhLWFhYWEtYWFhYWFhYWFhYWFhIiwiZXhwIjoxNzU2MzI2MTE5LCJpc3MiOiJMdWZ0aGFuc2EiLCJhdWQiOiJMdWZ0aGFuc2EuQXBpIn0.ggBPtatB_5_xr62Z_ZFaJLDMlYF0bJXNt_5q69dgauo";
+
+        const statusEl = document.getElementById("status");
+        const uploadBtn = document.getElementById("uploadBtn");
+        const progressFill = document.getElementById("progressFill");
+        const logEl = document.getElementById("log");
+
+        const log = (m) => {
+            console.log(m);
+            logEl.textContent += m + "\n";
+            logEl.scrollTop = logEl.scrollHeight;
+        };
+
+        const updateStatus = (text, css) => {
+            statusEl.textContent = text;
+            statusEl.className = "status " + css;
+        };
+
+        const updateProgress = (pct) => {
+            progressFill.style.width = (pct || 0) + "%";
+        };
+
+        // Build connection
+        const conn = new signalR.HubConnectionBuilder()
+            .withUrl(`${API_BASE}/hubs/upload`, { accessTokenFactory: () => TOKEN })
+            .withAutomaticReconnect()
+            .build();
+
+        conn.on("progress", msg => {
+            log(`[${msg.stage}] ${msg.pct ?? 0}% - ${msg.message}`);
+            updateProgress(msg.pct ?? 0);
+        });
+
+        conn.onreconnecting(err => {
+            updateStatus("Reconnecting...", "connecting");
+            uploadBtn.disabled = true;
+        });
+        conn.onreconnected(() => {
+            updateStatus("Connected", "connected");
+            uploadBtn.disabled = false;
+        });
+        conn.onclose(err => {
+            updateStatus("Disconnected", "disconnected");
+            uploadBtn.disabled = true;
+        });
+
+        // Start connection
+        try {
+            await conn.start();
+            log("Connected to hub. ConnectionId: " + conn.connectionId);
+            updateStatus("Connected", "connected");
+            uploadBtn.disabled = false;
+        } catch (e) {
+            log("Hub connect failed: " + e);
+            updateStatus("Connection failed", "disconnected");
+            return;
+        }
+
+        // Upload click
+        uploadBtn.onclick = async () => {
+            const file = document.getElementById("fileInput").files[0];
+            if (!file) return alert("Pick a CSV first");
+
+            const form = new FormData();
+            form.append("file", file);
+
+            uploadBtn.disabled = true;
+            updateStatus("Uploading...", "connecting");
+            updateProgress(0);
+
+            const url = `${API_BASE}/api/touroperators/${TOUR_OPERATOR_ID}/pricing-upload` +
+                `?connectionId=${encodeURIComponent(conn.connectionId)}&mode=skip`;
+
+            try {
+                const resp = await fetch(url, {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${TOKEN}` },
+                    body: form
+                });
+                const result = await resp.json();
+                log("Upload finished: " + JSON.stringify(result, null, 2));
+                updateStatus("Upload complete", "connected");
+                updateProgress(100);
+            } catch (err) {
+                log("Upload failed: " + err);
+                updateStatus("Upload failed", "disconnected");
+            } finally {
+                uploadBtn.disabled = false;
+            }
+        };
+    })();
+</script>
+</body>
+</html>

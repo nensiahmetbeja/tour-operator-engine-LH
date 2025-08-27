@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Lufthansa.Api.Auth;
 using Lufthansa.Api.Auth.Blacklist;
+using Lufthansa.Api.Hubs;
+using Lufthansa.Api.RealTime;
 using Lufthansa.Application.Services;
 using Lufthansa.Infrastructure.Persistence;
 using Lufthansa.Infrastructure.Services;
@@ -11,6 +13,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var allowedOrigins = new[] { "http://localhost:8080", "http://127.0.0.1:8080" };
+
+builder.Services.AddCors(o => o.AddPolicy("dev", p => p
+        .WithOrigins(allowedOrigins)
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials()  // SignalR needs this
+));
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -88,8 +99,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("TourOperatorOnly", p => p.RequireRole("TourOperator"));
 });
 
-// Simple user service (in-memory for now; swap to EF/Identity later)
+// Simple user service (in-memory for now)
 builder.Services.AddSingleton<IUserService, InMemoryUserService>();
+builder.Services.AddSignalR();
 
 // Token blacklist (memory now; swap to Redis later)
 builder.Services.AddSingleton<ITokenBlacklist, InMemoryTokenBlacklist>();
@@ -97,6 +109,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITourOperatorService, TourOperatorService>();
 builder.Services.AddScoped<IPricingUploadService, PricingUploadService>();
 builder.Services.AddScoped<IPricingQueryService, PricingQueryService>();
+builder.Services.AddScoped<IProgressNotifier, SignalRProgressNotifier>();
 
 // Redis cache
 builder.Services.AddStackExchangeRedisCache(options =>
@@ -107,6 +120,8 @@ builder.Services.AddStackExchangeRedisCache(options =>
 
 
 var app = builder.Build();
+app.UseCors("dev"); 
+app.UseStaticFiles();          // serves wwwroot/*
 
 if (app.Environment.IsDevelopment())
 {
@@ -114,6 +129,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.MapHub<UploadHub>("/hubs/upload");
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
