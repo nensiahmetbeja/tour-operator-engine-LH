@@ -7,6 +7,7 @@ using Lufthansa.Api.Auth.Blacklist;
 using Lufthansa.Api.Hubs;
 using Lufthansa.Api.RealTime;
 using Lufthansa.Application.Services;
+using Lufthansa.Domain.Entities;
 using Lufthansa.Infrastructure.Persistence;
 using Lufthansa.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
@@ -138,5 +139,23 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    db.Database.EnsureCreated();
+
+    if (!db.TourOperators.Any())
+    {
+        var opId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        db.TourOperators.Add(new TourOperator()
+        {
+            Id = opId,
+            Name = "Demo Operator",
+            Code = "DEMO",
+            CreatedAt = DateTime.UtcNow
+        });
+        db.SaveChanges();
+    }
+}
 
 app.Run();
